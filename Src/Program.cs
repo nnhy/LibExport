@@ -40,6 +40,7 @@ namespace LibExport
             var txt = File.ReadAllText(mp.FullName).Substring("Library Member Name", "Library Totals");
             var ns = txt.Trim().Split("\r\n");
             var objs = ns.Select(e => e.Split().Last()).Where(e => e.EndsWith(".o")).ToArray();
+
             // 找到原始对象文件
             var list = new List<String>();
             var headers = new List<String>();
@@ -64,38 +65,32 @@ namespace LibExport
                 fs = FindHeaders(header);
                 if (fs.Length > 0) headers.Add(fs[0]);
             }
+
+            // 分析cpp文件得到头文件
+            headers.Clear();
+            foreach (var item in ".".AsDirectory().GetAllFiles("*.cpp"))
+            {
+                GetHeaders(item.FullName, null, headers);
+            }
+
             Console.WriteLine("objs={0} list={1} headers={2}", objs.Length, list.Count, headers.Count);
             list.Sort();
             headers.Sort();
 
             // 临时目录
-            var dir = XTrace.TempPath.CombinePath(name);
-            if (Directory.Exists(dir)) dir.EnsureDirectory(false);
+            var tmp = XTrace.TempPath.CombinePath(name);
+            if (Directory.Exists(tmp)) tmp.EnsureDirectory(false);
 
             // 链接打包
-            var Ar = @"C:\Keil\ARM\ARMCC\bin\armar.exe";
-            var lib = dir.CombinePath(name + ".lib");
-            lib.EnsureDirectory(true);
-
-            var sb = new StringBuilder();
-            sb.Append("--create -c");
-            sb.AppendFormat(" -r \"{0}\"", lib);
-
-            foreach (var item in list)
-            {
-                sb.Append(" ");
-                sb.Append(item);
-                Console.WriteLine(item);
-            }
-
-            var rs = Ar.Run(sb.ToString(), 3000, XTrace.WriteLine);
+            var lib = tmp.CombinePath(name + ".lib");
+            BuildLib(lib, list);
 
             // 拷贝头文件
             var root = "../SmartOS/".GetFullPath();
             foreach (var item in headers)
             {
                 var dst = item.TrimStart(root).TrimStart("/");
-                dst = dir.CombinePath(dst);
+                dst = tmp.CombinePath(dst);
                 dst.EnsureDirectory(true);
                 File.Copy(item, dst, true);
             }
@@ -103,9 +98,28 @@ namespace LibExport
             // 压缩打包头文件
             var zip = (name + ".zip").GetFullPath();
             if (File.Exists(zip)) File.Delete(zip);
-            ZipFile.CreateFromDirectory(dir, zip, CompressionLevel.Optimal, true);
+            ZipFile.CreateFromDirectory(tmp, zip, CompressionLevel.Optimal, false);
 
-            Directory.Delete(dir, true);
+            Directory.Delete(tmp, true);
+        }
+
+        static void BuildLib(String lib, ICollection<String> objs)
+        {
+            var Ar = @"C:\Keil\ARM\ARMCC\bin\armar.exe";
+            lib.EnsureDirectory(true);
+
+            var sb = new StringBuilder();
+            sb.Append("--create -c");
+            sb.AppendFormat(" -r \"{0}\"", lib);
+
+            foreach (var item in objs)
+            {
+                sb.Append(" ");
+                sb.Append(item);
+                Console.WriteLine(item);
+            }
+
+            var rs = Ar.Run(sb.ToString(), 3000, XTrace.WriteLine);
         }
 
         static String[] FindObjs(String obj, Boolean debug)
@@ -133,7 +147,39 @@ namespace LibExport
                 _headers = dir1.AsDirectory().GetAllFiles("*.h", true).ToArray();
             }
 
-            return _headers.Where(e => e.Name.EqualIgnoreCase(header)).Select(e => e.FullName).ToArray();
+            return _headers.Where(e => e.Name.EqualIgnoreCase(header) || e.FullName.EqualIgnoreCase(header) || e.FullName.EndsWithIgnoreCase(header)).Select(e => e.FullName).ToArray();
+        }
+
+        static Int32 GetHeaders(String file, ICollection<String> list, ICollection<String> headers)
+        {
+            if (!File.Exists(file)) return 0;
+
+            var root = Path.GetDirectoryName(file);
+
+            var count = 0;
+            var lines = File.ReadAllLines(file);
+            foreach (var item in lines)
+            {
+                var line = item.Trim();
+                if (line.StartsWith("#include"))
+                {
+                    line = line.TrimStart("#include").Trim().Trim('\"', '<', '>').Trim();
+                    //var h = root.CombinePath(line).GetFullPath();
+                    var h = line.Replace("/", "\\");
+
+                    var fs = FindHeaders(h);
+                    if (fs.Length > 0 && !headers.Contains(fs[0]))
+                    {
+                        Console.WriteLine(fs[0]);
+                        headers.Add(fs[0]);
+                        count++;
+
+                        count += GetHeaders(fs[0], list, headers);
+                    }
+                }
+            }
+
+            return count;
         }
     }
 }
