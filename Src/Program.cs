@@ -52,10 +52,11 @@ namespace LibExport
                 {
                     foreach (var item in fs)
                     {
+                        // 无法识别需要哪个同名文件，全部加入
                         if (!list.Contains(item))
                         {
                             list.Add(item);
-                            break;
+                            //break;
                         }
                     }
                 }
