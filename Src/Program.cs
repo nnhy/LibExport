@@ -15,7 +15,7 @@ namespace LibExport
             XTrace.UseConsole();
 
             // E:\Auto\STM32F1\Apollo0801
-            PathHelper.BaseDirectory = @"E:\Auto\STM32F1\Apollo0801";
+            PathHelper.BaseDirectory = @"E:\Auto\STM32F1\Apollo0901";
 
             Export(false);
             Export(true);
@@ -105,7 +105,7 @@ namespace LibExport
 
         static void BuildLib(String lib, ICollection<String> objs)
         {
-            var Ar = @"C:\Keil\ARM\ARMCC\bin\armar.exe";
+            var Ar = @"D:\Keil\ARM\ARMCC\bin\armar.exe";
             lib.EnsureDirectory(true);
 
             var sb = new StringBuilder();
@@ -147,7 +147,7 @@ namespace LibExport
                 _headers = dir1.AsDirectory().GetAllFiles("*.h", true).ToArray();
             }
 
-            return _headers.Where(e => e.Name.EqualIgnoreCase(header) || e.FullName.EqualIgnoreCase(header) || e.FullName.EndsWithIgnoreCase(header)).Select(e => e.FullName).ToArray();
+            return _headers.Where(e => e.Name.EqualIgnoreCase(header) || e.FullName.EqualIgnoreCase(header) || e.FullName.EndsWithIgnoreCase(header.EnsureStart("\\"))).Select(e => e.FullName).ToArray();
         }
 
         static Int32 GetHeaders(String file, ICollection<String> list, ICollection<String> headers)
@@ -168,14 +168,19 @@ namespace LibExport
                     var h = line.Replace("/", "\\");
 
                     var fs = FindHeaders(h);
-                    if (fs.Length > 0 && !headers.Contains(fs[0]))
+                    if (fs.Length > 0)
                     {
-                        Console.WriteLine(fs[0]);
-                        headers.Add(fs[0]);
-                        count++;
+                        if (!headers.Contains(fs[0]))
+                        {
+                            Console.WriteLine(fs[0]);
+                            headers.Add(fs[0]);
+                            count++;
 
-                        count += GetHeaders(fs[0], list, headers);
+                            count += GetHeaders(fs[0], list, headers);
+                        }
                     }
+                    else
+                        Console.WriteLine("无法找到 {0}", h);
                 }
             }
 
