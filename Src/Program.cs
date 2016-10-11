@@ -101,6 +101,8 @@ namespace LibExport
             //Objs = list;
 
             // 链接打包
+            name = "SmartOS";
+            if (debug) name += "D";
             var lib = Temp.CombinePath(name + ".lib");
             BuildLib(lib, list);
             Objs.Add(lib);
@@ -182,7 +184,6 @@ namespace LibExport
         public void Build()
         {
             var tmp = Temp;
-            //var sos = tmp.CombinePath("SmartOS");
             var sos = Output.CombinePath("SmartOS").EnsureDirectory(true);
 
             // 拷贝库文件
@@ -207,7 +208,7 @@ namespace LibExport
             // 拷贝编译脚本
             var tool = sos.CombinePath("Tool");
             var src = root.CombinePath("Tool").GetFullPath();
-            src.AsDirectory().CopyTo(tool, "MDK.cs;Build_SmartOS_*.cs", false, XTrace.WriteLine);
+            src.AsDirectory().CopyTo(tool, "MDK.cs", false, XTrace.WriteLine);
 
             // 拷贝文档手册
             var doc = Output.CombinePath("Doc");
@@ -218,13 +219,14 @@ namespace LibExport
             }
 
             // 拷贝固件库
-            var lib = Output.CombinePath("Lib").EnsureDirectory(false);
+            //var lib = Output.CombinePath("Lib");
+            var lib = sos;
             src = Root.CombinePath("../Lib").GetFullPath();
             src.AsDirectory().CopyTo(lib, "*.lib", false, XTrace.WriteLine);
-            src.AsDirectory().CopyTo(lib, "*.h", true, XTrace.WriteLine);
+            //src.AsDirectory().CopyTo(lib, "*.h", true, XTrace.WriteLine);
 
             // 拷贝例程
-            var sm = Output.CombinePath("Sample").EnsureDirectory(false);
+            var sm = Output.CombinePath("Sample");
             src = Root.CombinePath("../Sample").GetFullPath();
             src.AsDirectory().CopyTo(sm, "*.uvprojx;*.uvoptx;*.cs", false, XTrace.WriteLine);
             ".".AsDirectory().CopyTo(sm, "*.cpp", false, XTrace.WriteLine);
