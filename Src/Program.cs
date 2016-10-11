@@ -17,14 +17,49 @@ namespace LibExport
             // E:\Auto\STM32F1\Apollo0801
             PathHelper.BaseDirectory = @"E:\Auto\STM32F1\Apollo0901";
 
-            Export(false);
-            Export(true);
+            var pkg = new Package();
+            pkg.ParseObj(false);
+            pkg.ParseObj(true);
+            pkg.ParseHeader();
+            pkg.Build();
 
             Console.WriteLine("OK!");
             Console.ReadKey();
         }
 
-        static void Export(Boolean debug)
+    }
+
+    class Package
+    {
+        public String Name { get; set; }
+        public List<String> Objs { get; set; } = new List<String>();
+        public List<String> Headers { get; set; }
+        public String Ar { get; set; }
+        public String Root { get; set; }
+        public String Temp { get; set; }
+        public String Output { get; set; }
+
+        public Package()
+        {
+            Name = ".".AsDirectory().Name;
+
+            var rt = "../SmartOS/";
+            if (!Directory.Exists(rt.GetFullPath())) rt = "../" + rt;
+            if (Directory.Exists(rt.GetFullPath())) Root = rt;
+
+            // 临时目录
+            //var tmp = XTrace.TempPath.CombinePath(Name);
+            var tmp = XTrace.TempPath;
+            //var tmp = "{0}-SDK".F(Name);
+            if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+            Temp = tmp.EnsureDirectory(false);
+
+            tmp = "{0}-SDK".F(Name);
+            if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+            Output = tmp.EnsureDirectory(false);
+        }
+
+        public void ParseObj(Boolean debug)
         {
             var map = ".map";
 
@@ -33,6 +68,8 @@ namespace LibExport
 
             // 找到映射文件
             var mp = "List".AsDirectory().GetAllFiles("*" + map).FirstOrDefault();
+            if (mp == null || !mp.Exists) return;
+
             Console.WriteLine(mp.FullName);
             var name = mp.Name.TrimEnd(".map");
 
@@ -43,7 +80,6 @@ namespace LibExport
 
             // 找到原始对象文件
             var list = new List<String>();
-            var headers = new List<String>();
             foreach (var obj in objs)
             {
                 // 注意，不同目录可能有同名对象文件，所以需要同时在两个目录里面找
@@ -53,80 +89,26 @@ namespace LibExport
                     foreach (var item in fs)
                     {
                         // 无法识别需要哪个同名文件，全部加入
-                        if (!list.Contains(item))
-                        {
-                            list.Add(item);
-                            //break;
-                        }
+                        if (!list.Contains(item)) list.Add(item);
                     }
                 }
-
-                // 查找头文件
-                var header = Path.ChangeExtension(obj, ".h");
-                fs = FindHeaders(header);
-                if (fs.Length > 0) headers.Add(fs[0]);
             }
 
-            // 分析cpp文件得到头文件
-            headers.Clear();
-            foreach (var item in ".".AsDirectory().GetAllFiles("*.cpp"))
-            {
-                GetHeaders(item.FullName, null, headers);
-            }
-
-            Console.WriteLine("objs={0} list={1} headers={2}", objs.Length, list.Count, headers.Count);
+            Console.WriteLine("objs={0} list={1}", objs.Length, list.Count);
             list.Sort();
-            headers.Sort();
 
-            // 临时目录
-            var tmp = XTrace.TempPath.CombinePath(name);
-            if (Directory.Exists(tmp)) tmp.EnsureDirectory(false);
+            //Objs = list;
 
             // 链接打包
-            var lib = tmp.CombinePath(name + ".lib");
+            var lib = Temp.CombinePath(name + ".lib");
             BuildLib(lib, list);
-
-            // 拷贝头文件
-            var root = "../SmartOS/".GetFullPath();
-            foreach (var item in headers)
-            {
-                var dst = item.TrimStart(root).TrimStart("/");
-                dst = tmp.CombinePath(dst);
-                dst.EnsureDirectory(true);
-                File.Copy(item, dst, true);
-            }
-
-            // 压缩打包头文件
-            var zip = (name + ".zip").GetFullPath();
-            if (File.Exists(zip)) File.Delete(zip);
-            ZipFile.CreateFromDirectory(tmp, zip, CompressionLevel.Optimal, false);
-
-            Directory.Delete(tmp, true);
+            Objs.Add(lib);
         }
 
-        static void BuildLib(String lib, ICollection<String> objs)
+        String[] FindObjs(String obj, Boolean debug)
         {
-            var Ar = @"D:\Keil\ARM\ARMCC\bin\armar.exe";
-            lib.EnsureDirectory(true);
-
-            var sb = new StringBuilder();
-            sb.Append("--create -c");
-            sb.AppendFormat(" -r \"{0}\"", lib);
-
-            foreach (var item in objs)
-            {
-                sb.Append(" ");
-                sb.Append(item);
-                Console.WriteLine(item);
-            }
-
-            var rs = Ar.Run(sb.ToString(), 3000, XTrace.WriteLine);
-        }
-
-        static String[] FindObjs(String obj, Boolean debug)
-        {
-            var dir1 = "../SmartOS/Tool/Obj";
-            var dir2 = "../SmartOS/Platform/STM32F1/Obj";
+            var dir1 = Root.CombinePath("Tool/Obj");
+            var dir2 = Root.CombinePath("Platform/STM32F1/Obj");
 
             // 调试版
             if (debug)
@@ -139,19 +121,27 @@ namespace LibExport
             return fs.Select(e => e.FullName).ToArray();
         }
 
-        static FileInfo[] _headers;
-        static String[] FindHeaders(String header)
+        FileInfo[] _headers;
+        String[] FindHeaders(String header)
         {
-            if (_headers == null)
-            {
-                var dir1 = "../SmartOS/";
-                _headers = dir1.AsDirectory().GetAllFiles("*.h", true).ToArray();
-            }
+            if (_headers == null) _headers = Root.AsDirectory().GetAllFiles("*.h", true).ToArray();
 
             return _headers.Where(e => e.Name.EqualIgnoreCase(header) || e.FullName.EqualIgnoreCase(header) || e.FullName.EndsWithIgnoreCase(header.EnsureStart("\\"))).Select(e => e.FullName).ToArray();
         }
 
-        static Int32 GetHeaders(String file, ICollection<String> list, ICollection<String> headers)
+        public void ParseHeader()
+        {
+            // 分析cpp文件得到头文件
+            var headers = new List<String>();
+            foreach (var item in ".".AsDirectory().GetAllFiles("*.cpp"))
+            {
+                GetHeaders(item.FullName, headers);
+            }
+
+            Headers = headers;
+        }
+
+        Int32 GetHeaders(String file, ICollection<String> headers)
         {
             if (!File.Exists(file)) return 0;
 
@@ -177,7 +167,7 @@ namespace LibExport
                             headers.Add(fs[0]);
                             count++;
 
-                            count += GetHeaders(fs[0], list, headers);
+                            count += GetHeaders(fs[0], headers);
                         }
                     }
                     else
@@ -186,6 +176,61 @@ namespace LibExport
             }
 
             return count;
+        }
+
+        public void Build()
+        {
+            var tmp = Temp;
+            //var sos = tmp.CombinePath("SmartOS");
+            var sos = Output.CombinePath("SmartOS").EnsureDirectory(true);
+
+            // 拷贝库文件
+            foreach (var item in Objs)
+            {
+                var dst = sos.CombinePath(Path.GetFileName(item));
+                dst.EnsureDirectory(true);
+                File.Move(item, dst);
+            }
+
+            // 拷贝头文件
+            var root = Root.GetFullPath();
+            foreach (var item in Headers)
+            {
+                var dst = item.TrimStart(root).TrimStart("/");
+                dst = sos.CombinePath(dst);
+                dst.EnsureDirectory(true);
+                File.Copy(item, dst, true);
+            }
+
+            //// 压缩打包头文件
+            //var zip = "{0}-SDK\\SmartOS.zip".F(Name).GetFullPath();
+            //if (File.Exists(zip)) File.Delete(zip);
+            //ZipFile.CreateFromDirectory(sos, zip, CompressionLevel.Optimal, false);
+
+            //// 删除临时文件
+            //Directory.Delete(sos, true);
+
+            var di = tmp.AsDirectory().Parent;
+            if (di.GetFiles().Length == 0) di.Delete(true);
+        }
+
+        void BuildLib(String lib, ICollection<String> objs)
+        {
+            if (Ar.IsNullOrEmpty()) Ar = @"D:\Keil\ARM\ARMCC\bin\armar.exe";
+            lib.EnsureDirectory(true);
+
+            var sb = new StringBuilder();
+            sb.Append("--create -c");
+            sb.AppendFormat(" -r \"{0}\"", lib);
+
+            foreach (var item in objs)
+            {
+                sb.Append(" ");
+                sb.Append(item);
+                Console.WriteLine(item);
+            }
+
+            var rs = Ar.Run(sb.ToString(), 3000, XTrace.WriteLine);
         }
     }
 }
