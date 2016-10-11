@@ -50,12 +50,13 @@ namespace LibExport
             // 临时目录
             //var tmp = XTrace.TempPath.CombinePath(Name);
             var tmp = XTrace.TempPath;
-            //var tmp = "{0}-SDK".F(Name);
-            if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+            var di = tmp.AsDirectory();
+            if (di.Exists) di.Delete(true);
             Temp = tmp.EnsureDirectory(false);
 
             tmp = "{0}-SDK".F(Name);
-            if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
+            di = tmp.AsDirectory();
+            if (di.Exists) di.Delete(true);
             Output = tmp.EnsureDirectory(false);
         }
 
@@ -189,6 +190,7 @@ namespace LibExport
             {
                 var dst = sos.CombinePath(Path.GetFileName(item));
                 dst.EnsureDirectory(true);
+                if (File.Exists(dst)) File.Delete(dst);
                 File.Move(item, dst);
             }
 
@@ -202,15 +204,40 @@ namespace LibExport
                 File.Copy(item, dst, true);
             }
 
-            //// 压缩打包头文件
-            //var zip = "{0}-SDK\\SmartOS.zip".F(Name).GetFullPath();
-            //if (File.Exists(zip)) File.Delete(zip);
-            //ZipFile.CreateFromDirectory(sos, zip, CompressionLevel.Optimal, false);
+            // 拷贝编译脚本
+            var tool = sos.CombinePath("Tool");
+            var src = root.CombinePath("Tool").GetFullPath();
+            src.AsDirectory().CopyTo(tool, "MDK.cs;Build_SmartOS_*.cs", false, XTrace.WriteLine);
+
+            // 拷贝文档手册
+            var doc = Output.CombinePath("Doc");
+            foreach (var item in ".".AsDirectory().GetAllFiles("*.pdf"))
+            {
+                var dst = doc.CombinePath(item.Name).EnsureDirectory(true);
+                item.CopyTo(dst, true);
+            }
+
+            // 拷贝固件库
+            var lib = Output.CombinePath("Lib").EnsureDirectory(false);
+            src = Root.CombinePath("../Lib").GetFullPath();
+            src.AsDirectory().CopyTo(lib, "*.lib", false, XTrace.WriteLine);
+            src.AsDirectory().CopyTo(lib, "*.h", true, XTrace.WriteLine);
+
+            // 拷贝例程
+            var sm = Output.CombinePath("Sample").EnsureDirectory(false);
+            src = Root.CombinePath("../Sample").GetFullPath();
+            src.AsDirectory().CopyTo(sm, "*.uvprojx;*.uvoptx;*.cs", false, XTrace.WriteLine);
+            ".".AsDirectory().CopyTo(sm, "*.cpp", false, XTrace.WriteLine);
+
+            // 压缩打包
+            var zip = "{0}_{1:yyyyMMddHHmmss}.zip".F(Output.AsDirectory().Name, DateTime.Now).GetFullPath();
+            if (File.Exists(zip)) File.Delete(zip);
+            ZipFile.CreateFromDirectory(Output, zip, CompressionLevel.Optimal, false);
 
             //// 删除临时文件
             //Directory.Delete(sos, true);
 
-            var di = tmp.AsDirectory().Parent;
+            var di = tmp.AsDirectory();
             if (di.GetFiles().Length == 0) di.Delete(true);
         }
 
