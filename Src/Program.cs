@@ -228,7 +228,7 @@ namespace LibExport
             // 拷贝例程
             var sm = Output.CombinePath("Sample");
             src = Root.CombinePath("../Sample").GetFullPath();
-            src.AsDirectory().CopyTo(sm, "*.uvprojx;*.uvoptx;*.cs", false, XTrace.WriteLine);
+            src.AsDirectory().CopyTo(sm, "*.uvprojx;*.uvoptx;Build.cs", false, XTrace.WriteLine);
             ".".AsDirectory().CopyTo(sm, "*.cpp", false, XTrace.WriteLine);
 
             // 压缩打包
