@@ -96,6 +96,19 @@ namespace LibExport
             }
 
             Console.WriteLine("objs={0} list={1}", objs.Length, list.Count);
+
+            // 引入基础库以及核心库的全部对象
+            var bs = Root.CombinePath("Tool/Obj");
+            if (debug) bs += "D";
+            foreach (var item in bs.CombinePath("Core").AsDirectory().GetAllFiles("*.o"))
+            {
+                if (!list.Contains(item.FullName)) list.Add(item.FullName);
+            }
+            foreach (var item in bs.CombinePath("Kernel").AsDirectory().GetAllFiles("*.o"))
+            {
+                if (!list.Contains(item.FullName)) list.Add(item.FullName);
+            }
+
             list.Sort();
 
             //Objs = list;
